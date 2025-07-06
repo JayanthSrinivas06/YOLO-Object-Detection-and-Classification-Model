@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Device Detector & Classifier</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .section {
+            background-color: #e9ecef;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 25px;
+            border: 1px solid #dee2e6;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        input[type="file"] {
+            display: block;
+            margin-bottom: 15px;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            transition: background-color 0.2s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        pre {
+            background-color: #f8f9fa;
+            border: 1px solid #ced4da;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap; /* Ensures long lines wrap */
+            word-wrap: break-word; /* Ensures long words break */
+            max-height: 300px; /* Limit height for long outputs */
+            font-size: 0.9em;
+        }
+        .image-preview, .cropped-image-output {
+            margin-top: 15px;
+            text-align: center;
+            border: 1px dashed #ced4da;
+            padding: 10px;
+            border-radius: 5px;
+            min-height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .image-preview img, .cropped-image-output img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .result-label {
+            font-weight: bold;
+            margin-top: 10px;
+            color: #28a745;
+            font-size: 1.1em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Medical Device Detection & Classification</h1>
+
+        <div class="section">
+            <h3>Home / Introduction</h3>
+            <p>Welcome to the Medical Device API Frontend! This interface allows you to upload an image, detect a medical device within it, and then classify the type of the detected device.</p>
+            <p>
+                <strong>Instructions:</strong>
+                <ol>
+                    <li>Start your FastAPI backend (e.g., `uvicorn main:app --reload --host 0.0.0.0 --port 8000`).</li>
+                    <li>Select an image file using the "Choose File" button below.</li>
+                    <li>Click "Detect Device" to find a device and get its cropped image.</li>
+                    <li>(Optional) Click "Classify Cropped Image" to classify the *last detected* cropped device.</li>
+                </ol>
+            </p>
+        </div>
+
+        <div class="section">
+            <h3>Input Image</h3>
+            <input type="file" id="imageInput" accept="image/*">
+            <div class="image-preview" id="imagePreview">
+                <p>No image selected</p>
+                <img id="previewImage" src="" alt="Image Preview" style="display:none;">
+            </div>
+            <button id="detectButton">Detect Device</button>
+            <button id="classifyCroppedButton" disabled>Classify Cropped Image</button>
+        </div>
+
+        <div class="section">
+            <h3>Detection Output</h3>
+            <pre id="detectionOutput">Waiting for detection results...</pre>
+            <div class="cropped-image-output" id="croppedImageOutput">
+                <p>Cropped device image will appear here</p>
+                <img id="croppedPreviewImage" src="" alt="Cropped Device" style="display:none;">
+            </div>
+            <p id="detectionError" class="error" style="display:none;"></p>
+        </div>
+
+        <div class="section">
+            <h3>Classification Output</h3>
+            <pre id="classificationOutput">Waiting for classification results...</pre>
+            <p id="classificationError" class="error" style="display:none;"></p>
+        </div>
+    </div>
+
+    <script>
+        // Adjust this to your FastAPI server's address and port
+        const API_BASE_URL = "http://127.0.0.1:8000";
+
+        const imageInput = document.getElementById('imageInput');
+        const previewImage = document.getElementById('previewImage');
+        const imagePreviewContainer = document.getElementById('imagePreview');
+        const detectButton = document.getElementById('detectButton');
+        const classifyCroppedButton = document.getElementById('classifyCroppedButton');
+        const detectionOutput = document.getElementById('detectionOutput');
+        const croppedImageOutput = document.getElementById('croppedImageOutput');
+        const croppedPreviewImage = document.getElementById('croppedPreviewImage');
+        const detectionError = document.getElementById('detectionError');
+        const classificationOutput = document.getElementById('classificationOutput');
+        const classificationError = document.getElementById('classificationError');
+
+        let lastCroppedImageBase64 = null; // To store the base64 of the last detected crop
+
+        // Event listener for image input change
+        imageInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewImage.src = e.target.result;
+                    previewImage.style.display = 'block';
+                    imagePreviewContainer.querySelector('p').style.display = 'none';
+                    // Reset outputs when new image is selected
+                    detectionOutput.textContent = 'Waiting for detection results...';
+                    classificationOutput.textContent = 'Waiting for classification results...';
+                    croppedPreviewImage.style.display = 'none';
+                    croppedPreviewImage.src = '';
+                    detectionError.style.display = 'none';
+                    classificationError.style.display = 'none';
+                    classifyCroppedButton.disabled = true;
+                    lastCroppedImageBase64 = null;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                previewImage.src = '';
+                previewImage.style.display = 'none';
+                imagePreviewContainer.querySelector('p').style.display = 'block';
+            }
+        });
+
+        // Function to handle API calls
+        async function callApi(endpoint, file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                return await response.json();
+            } catch (error) {
+                console.error(`Error calling ${endpoint}:`, error);
+                return { error: `Network error or API not reachable: ${error.message}` };
+            }
+        }
+
+        // Event listener for Detect Button
+        detectButton.addEventListener('click', async () => {
+            const file = imageInput.files[0];
+            if (!file) {
+                alert('Please select an image first!');
+                return;
+            }
+
+            detectButton.disabled = true;
+            detectionOutput.textContent = 'Detecting device...';
+            detectionError.style.display = 'none';
+            croppedPreviewImage.style.display = 'none';
+            croppedPreviewImage.src = '';
+            lastCroppedImageBase64 = null;
+            classifyCroppedButton.disabled = true; // Disable until new crop is available
+
+            const result = await callApi('/detect-device/', file);
+            detectButton.disabled = false;
+
+            if (result.error) {
+                detectionOutput.textContent = JSON.stringify(result, null, 2);
+                detectionError.textContent = `Error: ${result.error}`;
+                detectionError.style.display = 'block';
+            } else {
+                detectionOutput.textContent = JSON.stringify(result, null, 2);
+                if (result.cropped_image_base64 && result.label !== "no_device_detected") {
+                    lastCroppedImageBase64 = result.cropped_image_base64;
+                    croppedPreviewImage.src = `data:image/jpeg;base64,${result.cropped_image_base64}`;
+                    croppedPreviewImage.style.display = 'block';
+                    croppedImageOutput.querySelector('p').style.display = 'none';
+                    classifyCroppedButton.disabled = false; // Enable classification button
+                } else {
+                    croppedPreviewImage.style.display = 'none';
+                    croppedImageOutput.querySelector('p').style.display = 'block';
+                    croppedImageOutput.querySelector('p').textContent = result.label === "no_device_detected" ? "No device detected to crop." : "No cropped image returned.";
+                }
+            }
+        });
+
+        // Event listener for Classify Cropped Button
+        classifyCroppedButton.addEventListener('click', async () => {
+            if (!lastCroppedImageBase64) {
+                alert('No cropped image available to classify. Run detection first!');
+                return;
+            }
+
+            classifyCroppedButton.disabled = true;
+            classificationOutput.textContent = 'Classifying cropped image...';
+            classificationError.style.display = 'none';
+
+            // Convert base64 to Blob for sending as File
+            const byteCharacters = atob(lastCroppedImageBase64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: 'image/jpeg' });
+            const croppedFile = new File([blob], "cropped_device.jpg", { type: "image/jpeg" });
+
+
+            const result = await callApi('/classify-device/', croppedFile);
+            classifyCroppedButton.disabled = false;
+
+            if (result.error) {
+                classificationOutput.textContent = JSON.stringify(result, null, 2);
+                classificationError.textContent = `Error: ${result.error}`;
+                classificationError.style.display = 'block';
+            } else {
+                classificationOutput.textContent = JSON.stringify(result, null, 2);
+                // Optionally display the label more prominently
+                // classificationOutput.insertAdjacentHTML('beforeend', `<p class="result-label">Predicted: ${result.label} (Confidence: ${(result.confidence * 100).toFixed(2)}%)</p>`);
+            }
+        });
+
+    </script>
+</body>
+</html>
