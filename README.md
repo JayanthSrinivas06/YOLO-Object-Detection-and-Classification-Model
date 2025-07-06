@@ -11,7 +11,7 @@ This project presents a dual-model system using **YOLOv8** and **YOLOv8-cls** to
 ### 🗂️ 1. Data Collection
 Begin by collecting a raw dataset of the objects you want to detect and classify. This project was demonstrated using 5 visually similar medical device classes, but the architecture is adaptable to any object category.
 
-### 🏷️ 2. Data Annotation (Object Detection Labels)
+### 🏷️ 2. Data Annotation (Object Detection Labels) and Data Argumentation 
 Use [Roboflow](https://roboflow.com/) or any other annotation tool to label the collected images with bounding boxes for each object class. This creates the detection dataset needed to train the YOLOv8 object detection model.
 
 ### 💾 3. Exporting & Organizing Annotations
@@ -28,6 +28,8 @@ Run the notebook `medical_device.ipynb` to process the annotations and generate 
 
 - `detect_dataset/` – for training the **YOLOv8 object detector**.
 - `classify_dataset/` – for training the **YOLOv8-cls classifier**, using cropped object images and their respective labels.
+
+I used 5 medical device images: Weighting scale, Glucose meter, SPO2, BP Monitor, HBA1C (Digital devices) used dataset of 2000 images and made 5000 images after Data Argumentation.
 
 ---
 
